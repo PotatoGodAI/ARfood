@@ -41,6 +41,8 @@ if (!admin.apps.length) {
   });
 }
 
+import os from "os";
+
 const app = express();
 
 // Basic middleware
@@ -64,16 +66,16 @@ app.use((req, res, next) => {
   next();
 });
 
-// Ensure uploads directory exists (still used as a temporary buffer)
-const uploadsDir = path.join(process.cwd(), "uploads");
-if (!fs.existsSync(uploadsDir)) {
+// Use /tmp for Vercel compatibility (only writable directory)
+const uploadsDir = process.env.VERCEL ? "/tmp" : path.join(process.cwd(), "uploads");
+if (!fs.existsSync(uploadsDir) && !process.env.VERCEL) {
   fs.mkdirSync(uploadsDir);
 }
 
 // Configure multer for file uploads
 const multerStorage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, "uploads/");
+    cb(null, uploadsDir);
   },
   filename: (req, file, cb) => {
     const ext = path.extname(file.originalname);
@@ -150,7 +152,10 @@ app.post("/api/upload", upload.single("model"), async (req, res) => {
     console.log("File uploaded to server buffer, now persisting to Vercel Blob:", req.file.originalname);
     
     // Use the provided token for Vercel Blob
-    const blobToken = process.env.BLOB_READ_WRITE_TOKEN || "vercel_blob_rw_cAMjUXLzjn8MELE7_4E3dWY6EN6E15thzu9WGQpXfhcs4s1";
+    const blobToken = process.env.BLOB_READ_WRITE_TOKEN;
+    if (!blobToken) {
+      throw new Error("BLOB_READ_WRITE_TOKEN is not configured in Vercel environment variables");
+    }
     
     const blob = await put(`models/${req.body.userId || 'anonymous'}/${Date.now()}_${req.file.originalname}`, fs.readFileSync(req.file.path), {
       access: 'public',
@@ -185,7 +190,10 @@ app.delete("/api/blob/delete", async (req, res) => {
   if (!url) return res.status(400).json({ error: "Missing URL" });
   
   try {
-    const blobToken = process.env.BLOB_READ_WRITE_TOKEN || "vercel_blob_rw_cAMjUXLzjn8MELE7_4E3dWY6EN6E15thzu9WGQpXfhcs4s1";
+    const blobToken = process.env.BLOB_READ_WRITE_TOKEN;
+    if (!blobToken) {
+      throw new Error("BLOB_READ_WRITE_TOKEN is not configured in Vercel environment variables");
+    }
     await del(url, { token: blobToken });
     res.json({ message: "Blob deleted successfully" });
   } catch (error: any) {

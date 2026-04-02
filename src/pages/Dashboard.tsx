@@ -114,31 +114,59 @@ export default function Dashboard() {
     setUploadProgress(0);
     
     try {
-      console.log("Starting client-side Vercel Blob upload for file:", file.name, "size:", file.size);
+      console.log("Starting server-side upload for file:", file.name, "size:", file.size);
       
-      const blob = await upload(file.name, file, {
-        access: 'public',
-        handleUploadUrl: '/api/upload/blob',
-        clientPayload: JSON.stringify({ userId: user.uid }),
-        onUploadProgress: (progressEvent) => {
-          const progress = Math.round(progressEvent.percentage);
-          setUploadProgress(progress);
-          console.log("Upload progress:", progress, "%");
-        },
+      const formData = new FormData();
+      formData.append("model", file);
+      formData.append("userId", user.uid);
+
+      const xhr = new XMLHttpRequest();
+      
+      const uploadPromise = new Promise<any>((resolve, reject) => {
+        xhr.upload.addEventListener("progress", (event) => {
+          if (event.lengthComputable) {
+            const progress = Math.round((event.loaded / event.total) * 100);
+            setUploadProgress(progress);
+            console.log("Upload progress:", progress, "%");
+          }
+        });
+
+        xhr.addEventListener("load", () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            try {
+              const response = JSON.parse(xhr.responseText);
+              resolve(response);
+            } catch (e) {
+              reject(new Error("Failed to parse server response"));
+            }
+          } else {
+            try {
+              const errorData = JSON.parse(xhr.responseText);
+              reject(new Error(errorData.error || `Upload failed with status ${xhr.status}`));
+            } catch (e) {
+              reject(new Error(`Upload failed with status ${xhr.status}`));
+            }
+          }
+        });
+
+        xhr.addEventListener("error", () => reject(new Error("Network error occurred during upload")));
+        xhr.addEventListener("abort", () => reject(new Error("Upload aborted")));
+
+        xhr.open("POST", "/api/upload");
+        xhr.send(formData);
       });
 
-      console.log("Upload successful, blob response:", blob);
+      const response = await uploadPromise;
+      console.log("Server-side upload successful, response:", response);
       
       // Use our proxy to avoid CORS issues on the client
-      // We use a relative URL to ensure it works on both dev and shared origins
-      const proxiedUrl = `/api/proxy-storage?url=${encodeURIComponent(blob.url)}`;
+      const proxiedUrl = `/api/proxy-storage?url=${encodeURIComponent(response.url)}`;
       
-      // NOTE: We use Firestore for metadata (name, URL, etc.) and Vercel Blob for file storage.
       const modelData = {
         name: file.name.replace(/\.[^/.]+$/, ""), // Remove extension
         originalName: file.name,
         url: proxiedUrl,
-        storagePath: blob.url,
+        storagePath: response.url,
         type: "file",
         createdAt: Date.now(),
         userId: user.uid,
