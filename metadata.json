@@ -1,0 +1,5 @@
+{
+  "name": "FoodAR - 3D Food AR Viewer",
+  "description": "Upload 3D food models, generate QR codes, and view them in AR on iPhone and Android.",
+  "requestFramePermissions": ["camera"]
+}

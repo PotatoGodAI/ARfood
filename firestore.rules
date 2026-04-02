@@ -1,0 +1,45 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper Functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isValidModel(data) {
+      return data.keys().hasAll(['name', 'url', 'type', 'createdAt', 'userId']) &&
+             data.keys().hasOnly(['name', 'url', 'type', 'createdAt', 'userId', 'storagePath', 'originalName']) &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 255 &&
+             data.url is string && data.url.size() > 0 && data.url.size() < 2048 &&
+             data.type in ['file', 'link'] &&
+             data.createdAt is number &&
+             data.userId is string &&
+             (!('storagePath' in data) || (data.storagePath is string && data.storagePath.size() < 1024)) &&
+             (!('originalName' in data) || (data.originalName is string && data.originalName.size() < 255));
+    }
+
+    // Models Collection
+    match /models/{modelId} {
+      // Allow anyone to read models (for AR viewing on mobile)
+      // In a production app, we might want to restrict this, 
+      // but for an AR viewer, the mobile device needs access.
+      allow read: if true;
+      
+      // Only authenticated users can create/update/delete their own models
+      allow create: if isAuthenticated() && 
+                    isValidModel(request.resource.data) &&
+                    request.resource.data.userId == request.auth.uid;
+                    
+      allow update: if isAuthenticated() && 
+                    isOwner(resource.data.userId) &&
+                    isValidModel(request.resource.data) &&
+                    request.resource.data.userId == resource.data.userId;
+                    
+      allow delete: if isAuthenticated() && isOwner(resource.data.userId);
+    }
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "entities": {
+    "Model": {
+      "title": "3D Model",
+      "description": "A 3D food model metadata",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "url": { "type": "string" },
+        "type": { "type": "string", "enum": ["file", "link"] },
+        "createdAt": { "type": "number" },
+        "userId": { "type": "string" }
+      },
+      "required": ["id", "name", "url", "type", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/models/{modelId}": {
+      "schema": "Model",
+      "description": "Collection of 3D models"
+    }
+  }
+}
