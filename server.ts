@@ -101,20 +101,26 @@ const upload = multer({
 // Vercel Blob client-side upload authorization
 app.post("/api/upload/blob", async (req, res) => {
   const body = req.body;
+  console.log(`[Vercel Blob] Received token request for: ${body?.pathname || 'unknown'}`);
   
   try {
-    if (!process.env.BLOB_READ_WRITE_TOKEN) {
-      console.warn("BLOB_READ_WRITE_TOKEN is not set in environment variables");
+    const blobToken = process.env.BLOB_READ_WRITE_TOKEN;
+    if (!blobToken) {
+      console.error("[Vercel Blob] BLOB_READ_WRITE_TOKEN is missing in environment");
+      return res.status(500).json({ error: "Storage token not configured on server" });
     }
 
     const jsonResponse = await handleUpload({
       body,
       request: req,
+      token: blobToken,
       onBeforeGenerateToken: async (pathname, clientPayload) => {
         const payload = JSON.parse(clientPayload || '{}');
         if (!payload.userId) {
           throw new Error("User ID is required for upload");
         }
+        
+        console.log(`[Vercel Blob] Generating token for user: ${payload.userId}, path: ${pathname}`);
         
         return {
           allowedContentTypes: [
