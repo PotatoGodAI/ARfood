@@ -34,11 +34,19 @@ try {
 
 // Initialize Admin SDK for server-side persistence
 if (!admin.apps.length) {
-  console.log("Initializing Firebase Admin with Project ID:", firebaseConfig.projectId);
-  admin.initializeApp({
-    projectId: firebaseConfig.projectId,
-    storageBucket: firebaseConfig.storageBucket
-  });
+  if (firebaseConfig.projectId) {
+    try {
+      console.log("Initializing Firebase Admin with Project ID:", firebaseConfig.projectId);
+      admin.initializeApp({
+        projectId: firebaseConfig.projectId,
+        storageBucket: firebaseConfig.storageBucket
+      });
+    } catch (error) {
+      console.error("Firebase Admin initialization failed:", error);
+    }
+  } else {
+    console.warn("Firebase Project ID is missing. Firebase Admin will not be initialized.");
+  }
 }
 
 import os from "os";
@@ -98,6 +106,19 @@ const upload = multer({
 });
 
 // API Routes
+app.get("/api/health", (req, res) => {
+  res.json({ 
+    status: "ok", 
+    timestamp: new Date().toISOString(),
+    env: { 
+      hasBlobToken: !!process.env.BLOB_READ_WRITE_TOKEN,
+      hasFirebaseId: !!process.env.FIREBASE_PROJECT_ID,
+      nodeEnv: process.env.NODE_ENV,
+      isVercel: !!process.env.VERCEL
+    }
+  });
+});
+
 // Vercel Blob client-side upload authorization
 app.post("/api/upload/blob", async (req, res) => {
   const body = req.body;
@@ -119,15 +140,22 @@ app.post("/api/upload/blob", async (req, res) => {
       token: blobToken,
       onBeforeGenerateToken: async (pathname, clientPayload) => {
         let payload: any = {};
-        try {
-          payload = JSON.parse(clientPayload || '{}');
-        } catch (e) {
-          console.error("[Vercel Blob] Failed to parse clientPayload:", clientPayload);
-          throw new Error("Invalid client payload");
+        if (clientPayload) {
+          try {
+            payload = JSON.parse(clientPayload);
+          } catch (e) {
+            console.error("[Vercel Blob] Failed to parse clientPayload as string:", clientPayload);
+            // If it's already an object, use it
+            if (typeof clientPayload === 'object') {
+              payload = clientPayload;
+            } else {
+              throw new Error("Invalid client payload format");
+            }
+          }
         }
 
         if (!payload.userId) {
-          console.error("[Vercel Blob] Missing userId in payload");
+          console.error("[Vercel Blob] Missing userId in payload:", payload);
           throw new Error("User ID is required for upload");
         }
         
@@ -448,6 +476,8 @@ async function startServer() {
   }
 }
 
-startServer();
+startServer().catch(err => {
+  console.error("Failed to start server:", err);
+});
 
 export default app;
