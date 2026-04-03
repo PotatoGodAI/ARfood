@@ -1,5 +1,4 @@
 import express from "express";
-import { createServer as createViteServer } from "vite";
 import path from "path";
 import multer from "multer";
 import { v4 as uuidv4 } from "uuid";
@@ -8,8 +7,6 @@ import fs from "fs";
 import { Readable } from "stream";
 import { put, del } from "@vercel/blob";
 import { handleUpload } from "@vercel/blob/client";
-
-import admin from "firebase-admin";
 
 // Load Firebase config from file or environment variables
 let firebaseConfig: any = {};
@@ -32,24 +29,8 @@ try {
   console.error("Error reading Firebase config:", error);
 }
 
-// Initialize Admin SDK for server-side persistence
-if (!admin.apps.length) {
-  if (firebaseConfig.projectId) {
-    try {
-      console.log("Initializing Firebase Admin with Project ID:", firebaseConfig.projectId);
-      admin.initializeApp({
-        projectId: firebaseConfig.projectId,
-        storageBucket: firebaseConfig.storageBucket
-      });
-    } catch (error) {
-      console.error("Firebase Admin initialization failed:", error);
-    }
-  } else {
-    console.warn("Firebase Project ID is missing. Firebase Admin will not be initialized.");
-  }
-}
-
-import os from "os";
+// Initialize Admin SDK for server-side persistence (if needed in future)
+// Currently removed to reduce bundle size and prevent Vercel startup crashes
 
 const app = express();
 
@@ -410,36 +391,37 @@ app.use((err: any, req: any, res: any, next: any) => {
   next();
 });
 
-async function startServer() {
-  const PORT = 3000;
+// Production static file serving
+const isProd = process.env.NODE_ENV === "production";
+const distPath = path.join(process.cwd(), "dist");
+const distIndex = path.join(distPath, "index.html");
+const rootIndex = path.join(process.cwd(), "index.html");
 
-  // Vite middleware for development OR if build is missing in production
-  const isProd = process.env.NODE_ENV === "production";
-  const distPath = path.join(process.cwd(), "dist");
-  const distIndex = path.join(distPath, "index.html");
-  const rootIndex = path.join(process.cwd(), "index.html");
+if (isProd && fs.existsSync(distIndex)) {
+  console.log("[Server] Serving static files from dist/");
+  app.use(express.static(distPath));
+}
 
+async function setupDevServer() {
   if (process.env.NODE_ENV !== "production" && !process.env.VERCEL) {
     console.log(`[Server] Running in development mode, using Vite middleware`);
+    const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
     });
     app.use(vite.middlewares);
 
-    // Explicit fallback for SPA routes
+    // Explicit fallback for SPA routes in dev
     app.get("*", async (req, res, next) => {
-      // Only handle GET requests for the SPA fallback
       if (req.method !== "GET") return next();
-      
       const url = req.originalUrl;
-      // Skip API, uploads, and source files
       if (
         url.startsWith("/api") || 
         url.startsWith("/uploads") || 
         url.startsWith("/src") || 
         url.startsWith("/node_modules") ||
-        (url.includes(".") && !url.endsWith(".html")) // Skip files with extensions except .html
+        (url.includes(".") && !url.endsWith(".html"))
       ) {
         return next();
       }
@@ -451,33 +433,34 @@ async function startServer() {
         next(e);
       }
     });
-  } else if (isProd && fs.existsSync(distIndex)) {
-    console.log("[Server] Running in production mode, serving from dist/");
-    app.use(express.static(distPath));
-    app.get("*", (req, res) => {
-      res.sendFile(distIndex);
-    });
-  } else if (isProd) {
-    // Fallback for production if dist is missing (e.g. during first run or in some cloud environments)
-    app.get("*", (req, res) => {
-      if (fs.existsSync(rootIndex)) {
-        res.sendFile(rootIndex);
-      } else {
-        res.status(404).send("Application index.html not found");
-      }
-    });
-  }
-
-  // Only listen if not running as a serverless function (e.g. on Vercel)
-  if (!process.env.VERCEL) {
-    app.listen(PORT, "0.0.0.0", () => {
-      console.log(`Server running on http://localhost:${PORT}`);
-    });
   }
 }
 
-startServer().catch(err => {
-  console.error("Failed to start server:", err);
-});
+// SPA fallback for production
+if (isProd) {
+  app.get("*", (req, res, next) => {
+    if (req.url.startsWith("/api") || req.url.startsWith("/uploads")) return next();
+    
+    if (fs.existsSync(distIndex)) {
+      res.sendFile(distIndex);
+    } else if (fs.existsSync(rootIndex)) {
+      res.sendFile(rootIndex);
+    } else {
+      res.status(404).send("Application index.html not found");
+    }
+  });
+}
+
+// Start listening if not on Vercel
+if (!process.env.VERCEL) {
+  const PORT = 3000;
+  setupDevServer().then(() => {
+    app.listen(PORT, "0.0.0.0", () => {
+      console.log(`Server running on http://localhost:${PORT}`);
+    });
+  }).catch(err => {
+    console.error("Failed to setup dev server:", err);
+  });
+}
 
 export default app;
