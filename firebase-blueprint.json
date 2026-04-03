@@ -9,10 +9,14 @@
         "name": { "type": "string" },
         "url": { "type": "string" },
         "type": { "type": "string", "enum": ["file", "link"] },
+        "size": { "type": "number" },
+        "restaurant": { "type": "string" },
         "createdAt": { "type": "number" },
-        "userId": { "type": "string" }
+        "userId": { "type": "string" },
+        "storagePath": { "type": "string" },
+        "originalName": { "type": "string" }
       },
-      "required": ["id", "name", "url", "type", "createdAt"]
+      "required": ["name", "url", "type", "createdAt", "userId"]
     }
   },
   "firestore": {

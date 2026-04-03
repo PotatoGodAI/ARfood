@@ -11,15 +11,20 @@ service cloud.firestore {
     }
 
     function isValidModel(data) {
-      return data.keys().hasAll(['name', 'url', 'type', 'createdAt', 'userId']) &&
-             data.keys().hasOnly(['name', 'url', 'type', 'createdAt', 'userId', 'storagePath', 'originalName']) &&
+      let requiredFields = ['name', 'url', 'type', 'createdAt', 'userId'];
+      let allowedFields = ['name', 'url', 'type', 'createdAt', 'userId', 'storagePath', 'originalName', 'size', 'restaurant'];
+      
+      return data.keys().hasAll(requiredFields) &&
+             data.keys().hasOnly(allowedFields) &&
              data.name is string && data.name.size() > 0 && data.name.size() < 255 &&
              data.url is string && data.url.size() > 0 && data.url.size() < 2048 &&
              data.type in ['file', 'link'] &&
              data.createdAt is number &&
              data.userId is string &&
              (!('storagePath' in data) || (data.storagePath is string && data.storagePath.size() < 1024)) &&
-             (!('originalName' in data) || (data.originalName is string && data.originalName.size() < 255));
+             (!('originalName' in data) || (data.originalName is string && data.originalName.size() < 255)) &&
+             (!('size' in data) || (data.size is number)) &&
+             (!('restaurant' in data) || (data.restaurant is string && data.restaurant.size() < 255));
     }
 
     // Models Collection
