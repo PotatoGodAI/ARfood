@@ -101,22 +101,33 @@ const upload = multer({
 // Vercel Blob client-side upload authorization
 app.post("/api/upload/blob", async (req, res) => {
   const body = req.body;
-  console.log(`[Vercel Blob] Received token request for: ${body?.pathname || 'unknown'}`);
+  console.log(`[Vercel Blob] Received token request for: ${body?.pathname || 'unknown'}, type: ${body?.type}`);
   
   try {
     const blobToken = process.env.BLOB_READ_WRITE_TOKEN;
     if (!blobToken) {
       console.error("[Vercel Blob] BLOB_READ_WRITE_TOKEN is missing in environment");
-      return res.status(500).json({ error: "Storage token not configured on server" });
+      return res.status(500).json({ error: "Storage token not configured on server. Please set BLOB_READ_WRITE_TOKEN in Vercel settings." });
     }
+
+    // Log token presence (safe)
+    console.log(`[Vercel Blob] Token found: ${blobToken.substring(0, 10)}...`);
 
     const jsonResponse = await handleUpload({
       body,
       request: req,
       token: blobToken,
       onBeforeGenerateToken: async (pathname, clientPayload) => {
-        const payload = JSON.parse(clientPayload || '{}');
+        let payload: any = {};
+        try {
+          payload = JSON.parse(clientPayload || '{}');
+        } catch (e) {
+          console.error("[Vercel Blob] Failed to parse clientPayload:", clientPayload);
+          throw new Error("Invalid client payload");
+        }
+
         if (!payload.userId) {
+          console.error("[Vercel Blob] Missing userId in payload");
           throw new Error("User ID is required for upload");
         }
         

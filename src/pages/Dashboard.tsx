@@ -116,6 +116,31 @@ export default function Dashboard() {
     try {
       console.log("Starting client-side Vercel Blob upload for file:", file.name, "size:", file.size);
       
+      // Manual token test to get more detailed error info if it fails
+      try {
+        console.log("Testing token endpoint manually...");
+        const tokenTest = await fetch('/api/upload/blob', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            type: 'blob.generate-token',
+            payload: JSON.stringify({ userId: user.uid }),
+            pathname: file.name
+          })
+        });
+        
+        if (!tokenTest.ok) {
+          const errorText = await tokenTest.text();
+          console.error("Token endpoint failed:", tokenTest.status, errorText);
+          // We don't throw here, we let the upload() function try and fail with its own error
+          // but we've logged the detailed error now.
+        } else {
+          console.log("Token endpoint test successful");
+        }
+      } catch (tokenErr) {
+        console.error("Error testing token endpoint:", tokenErr);
+      }
+      
       const blob = await upload(file.name, file, {
         access: 'public',
         handleUploadUrl: '/api/upload/blob',
