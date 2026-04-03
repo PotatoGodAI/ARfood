@@ -15,6 +15,8 @@ interface Model {
   url: string;
   storagePath?: string;
   type: "file" | "link";
+  size?: number;
+  restaurant?: string;
   createdAt: number;
   userId: string;
 }
@@ -40,6 +42,8 @@ export default function Dashboard() {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [driveLink, setDriveLink] = useState("");
   const [modelName, setModelName] = useState("");
+  const [restaurantName, setRestaurantName] = useState("");
+  const [selectedRestaurant, setSelectedRestaurant] = useState<string>("All");
   const [user, setUser] = useState(auth.currentUser);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -166,6 +170,8 @@ export default function Dashboard() {
         url: proxiedUrl,
         storagePath: blob.url,
         type: "file",
+        size: file.size,
+        restaurant: restaurantName || "General",
         createdAt: Date.now(),
         userId: user.uid,
       };
@@ -175,6 +181,7 @@ export default function Dashboard() {
       console.log("Document added successfully with ID:", docRef.id);
       setUploading(false);
       setUploadProgress(0);
+      setRestaurantName("");
     } catch (error: any) {
       console.error("Upload error:", error);
       alert(`Upload failed: ${error.message}`);
@@ -207,12 +214,14 @@ export default function Dashboard() {
         name: modelName,
         url: directUrl,
         type: "link",
+        restaurant: restaurantName || "General",
         createdAt: Date.now(),
         userId: user.uid,
       };
       await addDoc(collection(db, "models"), modelData);
       setDriveLink("");
       setModelName("");
+      setRestaurantName("");
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, "models");
     }
@@ -299,350 +308,295 @@ export default function Dashboard() {
     document.body.removeChild(link);
   };
 
-  return (
-    <div className="max-w-5xl mx-auto p-6 md:p-12">
-      {/* Shared URL Warning */}
-      {window.location.origin.includes("ais-dev-") && (
-        <div className="mb-8 bg-blue-50 border border-blue-200 p-4 rounded-2xl flex items-start gap-3">
-          <div className="p-2 bg-blue-100 rounded-xl text-blue-600">
-            <ExternalLink className="w-5 h-5" />
-          </div>
-          <div className="text-sm text-blue-800">
-            <p className="font-bold mb-1">Public Sharing Enabled</p>
-            <p>The QR codes below now point to your <strong>Shared App URL</strong>. This allows anyone to view your models in AR without logging in.</p>
-            <div className="mt-3 p-3 bg-blue-100/50 rounded-xl border border-blue-200">
-              <p className="font-bold text-xs uppercase tracking-wider mb-1">Important:</p>
-              <ul className="list-disc list-inside space-y-1 text-xs">
-                <li>Make sure you have clicked the <strong>"Share"</strong> button in the top right of the AI Studio editor.</li>
-                <li>If you see "Page Not Found", wait 30 seconds for the public URL to become active.</li>
-                <li>To test on your phone, scan the QR code or use the <a href={publicOrigin} target="_blank" rel="noopener noreferrer" className="font-bold underline">Public Link</a>.</li>
-              </ul>
-            </div>
-          </div>
-        </div>
-      )}
+  const formatSize = (bytes?: number) => {
+    if (!bytes) return "Unknown size";
+    const mb = bytes / (1024 * 1024);
+    return mb < 1 ? `${(bytes / 1024).toFixed(1)} KB` : `${mb.toFixed(2)} MB`;
+  };
 
-      <header className="mb-12 flex flex-col md:flex-row items-center justify-between gap-6">
-        <div className="flex items-center gap-4">
-          <div className="p-3 bg-orange-500 rounded-2xl shadow-lg shadow-orange-200">
-            <Utensils className="w-8 h-8 text-white" />
+  const restaurants = ["All", ...Array.from(new Set(models.map(m => m.restaurant || "General")))];
+  const filteredModels = selectedRestaurant === "All" 
+    ? models 
+    : models.filter(m => (m.restaurant || "General") === selectedRestaurant);
+
+  return (
+    <div className="min-h-screen bg-neutral-50 flex flex-col lg:flex-row">
+      {/* Sidebar for Desktop */}
+      <aside className="w-full lg:w-80 bg-white border-b lg:border-b-0 lg:border-r border-neutral-200 p-6 lg:h-screen lg:sticky lg:top-0 overflow-y-auto shrink-0">
+        <div className="flex items-center gap-3 mb-10">
+          <div className="p-2.5 bg-orange-500 rounded-xl shadow-lg shadow-orange-200">
+            <Utensils className="w-6 h-6 text-white" />
           </div>
           <div>
-            <h1 className="text-4xl font-bold tracking-tight text-neutral-900">FoodAR</h1>
-            <p className="text-neutral-500">Upload 3D food models and view them in AR</p>
+            <h1 className="text-2xl font-bold tracking-tight text-neutral-900">FoodAR</h1>
+            <p className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest">Chef Dashboard</p>
           </div>
         </div>
-        
+
         {user ? (
-          <div className="flex items-center gap-4 bg-white p-2 pr-4 rounded-2xl border border-neutral-200 shadow-sm">
-            <div className="w-10 h-10 bg-orange-100 rounded-xl flex items-center justify-center text-orange-600">
-              <User className="w-6 h-6" />
+          <div className="space-y-8">
+            <div className="bg-neutral-50 p-4 rounded-2xl border border-neutral-100">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 bg-orange-100 rounded-xl flex items-center justify-center text-orange-600">
+                  <User className="w-6 h-6" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-bold truncate">{user.displayName}</p>
+                  <p className="text-[10px] text-neutral-500 uppercase tracking-wider">Verified Chef</p>
+                </div>
+              </div>
+              <button 
+                onClick={handleLogout}
+                className="w-full flex items-center justify-center gap-2 py-2.5 bg-white border border-neutral-200 rounded-xl text-xs font-bold text-neutral-600 hover:bg-red-50 hover:text-red-600 hover:border-red-100 transition-all"
+              >
+                <LogOut className="w-4 h-4" />
+                Sign Out
+              </button>
             </div>
-            <div className="text-left">
-              <p className="text-sm font-bold leading-none mb-1">{user.displayName}</p>
-              <p className="text-[10px] text-neutral-500 uppercase tracking-wider font-bold">Chef Account</p>
+
+            <div className="space-y-4">
+              <h3 className="text-xs font-bold text-neutral-400 uppercase tracking-widest px-2">Restaurants</h3>
+              <div className="space-y-1">
+                {restaurants.map(r => (
+                  <button
+                    key={r}
+                    onClick={() => setSelectedRestaurant(r)}
+                    className={`w-full text-left px-4 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center justify-between ${
+                      selectedRestaurant === r 
+                        ? 'bg-orange-500 text-white shadow-lg shadow-orange-200' 
+                        : 'text-neutral-600 hover:bg-neutral-50'
+                    }`}
+                  >
+                    {r}
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded-md ${
+                      selectedRestaurant === r ? 'bg-white/20 text-white' : 'bg-neutral-100 text-neutral-400'
+                    }`}>
+                      {r === "All" ? models.length : models.filter(m => (m.restaurant || "General") === r).length}
+                    </span>
+                  </button>
+                ))}
+              </div>
             </div>
-            <div className="w-px h-8 bg-neutral-200 mx-2" />
-            <button 
-              onClick={handleLogout}
-              className="p-2 bg-neutral-100 rounded-xl hover:bg-red-50 hover:text-red-600 transition-all text-neutral-600"
-              title="Logout"
-            >
-              <LogOut className="w-5 h-5" />
-            </button>
+
+            <div className="pt-4 border-t border-neutral-100">
+              <div className="bg-blue-50 p-4 rounded-2xl border border-blue-100">
+                <p className="text-[10px] font-bold text-blue-600 uppercase tracking-widest mb-2">Storage Tip</p>
+                <p className="text-[11px] text-blue-800 leading-relaxed">
+                  Use <strong>.glb</strong> for universal support. <strong>.usdz</strong> is iOS only.
+                </p>
+              </div>
+            </div>
           </div>
         ) : (
-          <button 
-            onClick={handleLogin}
-            disabled={isLoggingIn}
-            className={`flex items-center gap-3 bg-neutral-900 text-white px-8 py-4 rounded-2xl font-bold hover:bg-neutral-800 transition-all shadow-xl shadow-neutral-200 ${isLoggingIn ? 'opacity-50 cursor-not-allowed' : ''}`}
-          >
-            {isLoggingIn ? (
-              <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-            ) : (
-              <LogIn className="w-5 h-5" />
-            )}
-            {isLoggingIn ? 'Logging in...' : 'Login with Google'}
-          </button>
+          <div className="space-y-6">
+            <p className="text-sm text-neutral-500 leading-relaxed">Login to start managing your 3D food models and AR menus.</p>
+            <button 
+              onClick={handleLogin}
+              disabled={isLoggingIn}
+              className="w-full flex items-center justify-center gap-3 bg-neutral-900 text-white py-4 rounded-2xl font-bold hover:bg-neutral-800 transition-all shadow-xl shadow-neutral-200"
+            >
+              {isLoggingIn ? (
+                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+              ) : (
+                <LogIn className="w-5 h-5" />
+              )}
+              Google Login
+            </button>
+          </div>
         )}
-      </header>
+      </aside>
 
-      <div className="grid lg:grid-cols-2 gap-12">
-        {/* Upload Section */}
-        <section className="space-y-8">
-          {!user && (
-            <div className="bg-orange-50 border border-orange-200 p-8 rounded-[32px] text-orange-800 relative overflow-hidden">
-              <div className="absolute top-0 right-0 p-4 opacity-10">
-                <Utensils className="w-24 h-24" />
-              </div>
-              <p className="font-bold text-xl mb-2">Login Required</p>
-              <p className="text-sm leading-relaxed opacity-80">Please login with your Google account to upload and manage your 3D models. Other users can view your models without logging in.</p>
-            </div>
-          )}
-          
-          <div className={`bg-white p-8 rounded-[32px] border border-neutral-200 shadow-sm transition-opacity ${!user ? 'opacity-50 pointer-events-none' : ''}`}>
-            <h2 className="text-xl font-bold mb-6 flex items-center gap-3">
-              <div className="p-2 bg-orange-100 rounded-lg">
-                <Upload className="w-5 h-5 text-orange-600" />
-              </div>
-              Direct Upload
-            </h2>
-            <div className="space-y-6">
-              <label className="group relative flex flex-col items-center justify-center w-full h-56 border-2 border-dashed border-neutral-200 rounded-3xl cursor-pointer hover:border-orange-400 hover:bg-orange-50/30 transition-all">
-                <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                  <div className="w-16 h-16 bg-neutral-100 rounded-2xl flex items-center justify-center mb-4 group-hover:scale-110 group-hover:bg-orange-100 transition-all">
-                    <Upload className="w-8 h-8 text-neutral-400 group-hover:text-orange-600 transition-colors" />
+      {/* Main Content */}
+      <main className="flex-1 p-6 lg:p-12 overflow-x-hidden">
+        <div className="max-w-6xl mx-auto space-y-12">
+          {/* Top Bar / Upload Section */}
+          <div className="grid md:grid-cols-2 gap-8">
+            <div className={`bg-white p-6 rounded-[32px] border border-neutral-200 shadow-sm transition-opacity ${!user ? 'opacity-50 pointer-events-none' : ''}`}>
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-lg font-bold flex items-center gap-3">
+                  <div className="p-2 bg-orange-100 rounded-lg">
+                    <Upload className="w-5 h-5 text-orange-600" />
                   </div>
-                  <p className="mb-2 text-sm text-neutral-500">
-                    <span className="font-bold text-neutral-900">Click to upload</span> or drag and drop
-                  </p>
-                  <p className="text-xs text-neutral-400 font-medium">GLB, USDZ, or GLTF (MAX. 50MB)</p>
-                </div>
+                  Quick Upload
+                </h2>
                 <input 
-                  type="file" 
-                  className="hidden" 
-                  accept=".glb,.usdz,.gltf" 
-                  onChange={handleFileUpload}
-                  disabled={uploading}
+                  type="text"
+                  placeholder="Restaurant Name"
+                  value={restaurantName}
+                  onChange={(e) => setRestaurantName(e.target.value)}
+                  className="text-xs px-3 py-1.5 rounded-lg border border-neutral-200 focus:border-orange-500 outline-none w-32"
                 />
+              </div>
+              
+              <label className="group relative flex flex-col items-center justify-center w-full h-40 border-2 border-dashed border-neutral-200 rounded-3xl cursor-pointer hover:border-orange-400 hover:bg-orange-50/30 transition-all">
+                <div className="flex flex-col items-center justify-center">
+                  <Upload className="w-6 h-6 text-neutral-400 group-hover:text-orange-600 mb-2 transition-colors" />
+                  <p className="text-xs font-bold text-neutral-500">Drop GLB/USDZ here</p>
+                </div>
+                <input type="file" className="hidden" accept=".glb,.usdz,.gltf" onChange={handleFileUpload} disabled={uploading} />
                 {uploading && (
-                  <div className="absolute inset-0 bg-white/90 backdrop-blur-sm rounded-3xl flex items-center justify-center z-20 p-8">
-                    <div className="flex flex-col items-center gap-4 w-full max-w-xs">
-                      <div className="w-12 h-12 border-4 border-orange-500 border-t-transparent rounded-full animate-spin"></div>
-                      <div className="w-full space-y-2">
-                        <div className="flex justify-between text-xs font-bold text-orange-600 uppercase tracking-widest">
-                          <span>Uploading Model...</span>
-                          <span>{uploadProgress}%</span>
-                        </div>
-                        <div className="w-full h-2 bg-orange-100 rounded-full overflow-hidden">
-                          <motion.div 
-                            className="h-full bg-orange-500"
-                            initial={{ width: 0 }}
-                            animate={{ width: `${uploadProgress}%` }}
-                            transition={{ duration: 0.1 }}
-                          />
-                        </div>
+                  <div className="absolute inset-0 bg-white/95 backdrop-blur-sm rounded-3xl flex items-center justify-center z-20 p-6">
+                    <div className="w-full space-y-2">
+                      <div className="flex justify-between text-[10px] font-bold text-orange-600 uppercase">
+                        <span>Uploading...</span>
+                        <span>{uploadProgress}%</span>
+                      </div>
+                      <div className="w-full h-1.5 bg-orange-100 rounded-full overflow-hidden">
+                        <motion.div className="h-full bg-orange-500" initial={{ width: 0 }} animate={{ width: `${uploadProgress}%` }} />
                       </div>
                     </div>
                   </div>
                 )}
               </label>
-              
-              <div className="bg-blue-50 p-5 rounded-2xl flex gap-4 border border-blue-100">
-                <div className="p-2 bg-blue-100 rounded-xl shrink-0 h-fit">
-                  <Check className="w-4 h-4 text-blue-600" />
-                </div>
-                <div className="text-xs text-blue-800 space-y-1.5">
-                  <p className="font-bold uppercase tracking-wider">Pro Tip:</p>
-                  <p className="leading-relaxed">
-                    <strong>.glb</strong> is the universal format for both Android & iOS. 
-                    <strong>.usdz</strong> is iOS-only and will not work on Android devices. 
-                    For maximum compatibility, always prefer <strong>.glb</strong>.
-                  </p>
-                </div>
-              </div>
             </div>
-          </div>
 
-          <div className={`bg-white p-8 rounded-[32px] border border-neutral-200 shadow-sm transition-opacity ${!user ? 'opacity-50 pointer-events-none' : ''}`}>
-            <h2 className="text-xl font-bold mb-6 flex items-center gap-3">
-              <div className="p-2 bg-orange-100 rounded-lg">
-                <LinkIcon className="w-5 h-5 text-orange-600" />
-              </div>
-              Google Drive Link
-            </h2>
-            <form onSubmit={handleLinkSubmit} className="space-y-5">
-              <div>
-                <label className="block text-xs font-bold text-neutral-400 uppercase tracking-widest mb-2">Model Name</label>
+            <div className={`bg-white p-6 rounded-[32px] border border-neutral-200 shadow-sm transition-opacity ${!user ? 'opacity-50 pointer-events-none' : ''}`}>
+              <h2 className="text-lg font-bold mb-6 flex items-center gap-3">
+                <div className="p-2 bg-orange-100 rounded-lg">
+                  <LinkIcon className="w-5 h-5 text-orange-600" />
+                </div>
+                External Link
+              </h2>
+              <form onSubmit={handleLinkSubmit} className="grid grid-cols-2 gap-3">
                 <input 
                   type="text" 
                   value={modelName}
                   onChange={(e) => setModelName(e.target.value)}
-                  placeholder="e.g. Delicious Pizza"
-                  className="w-full px-5 py-4 rounded-2xl border border-neutral-200 focus:ring-4 focus:ring-orange-500/10 focus:border-orange-500 outline-none transition-all bg-neutral-50/50"
+                  placeholder="Model Name"
+                  className="col-span-2 px-4 py-2.5 rounded-xl border border-neutral-200 text-sm outline-none focus:border-orange-500 bg-neutral-50/50"
                 />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-neutral-400 uppercase tracking-widest mb-2">Drive Link</label>
                 <input 
                   type="url" 
                   value={driveLink}
                   onChange={(e) => setDriveLink(e.target.value)}
-                  placeholder="https://drive.google.com/..."
-                  className="w-full px-5 py-4 rounded-2xl border border-neutral-200 focus:ring-4 focus:ring-orange-500/10 focus:border-orange-500 outline-none transition-all bg-neutral-50/50"
+                  placeholder="Google Drive URL"
+                  className="col-span-2 px-4 py-2.5 rounded-xl border border-neutral-200 text-sm outline-none focus:border-orange-500 bg-neutral-50/50"
                 />
-              </div>
-              <button 
-                type="submit"
-                className="w-full bg-neutral-900 text-white py-4 rounded-2xl font-bold hover:bg-neutral-800 transition-all shadow-lg shadow-neutral-100"
-              >
-                Add Link
-              </button>
-            </form>
+                <button type="submit" className="col-span-2 bg-neutral-900 text-white py-3 rounded-xl font-bold text-sm hover:bg-neutral-800 transition-all">
+                  Add Link
+                </button>
+              </form>
+            </div>
           </div>
-        </section>
 
-        {/* List Section */}
-        <section className="space-y-8">
-          <div className="flex items-center justify-between">
-            <h2 className="text-2xl font-bold text-neutral-900 flex items-center gap-3">
-              Your Models
-              <span className="text-xs font-bold text-neutral-400 bg-neutral-100 px-3 py-1 rounded-full">
-                {models.length}
-              </span>
-            </h2>
-          </div>
-          
-          <div className="space-y-5">
-            <AnimatePresence mode="popLayout">
-              {models.map((model) => (
-                <motion.div 
-                  key={model.id}
-                  layout
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, scale: 0.95 }}
-                  className="bg-white p-6 rounded-[32px] border border-neutral-200 shadow-sm flex flex-col sm:flex-row items-center gap-6 group hover:border-orange-200 transition-colors"
-                >
-                  <div className="p-4 bg-neutral-50 rounded-3xl relative group/qr">
-                    <QRCodeCanvas 
-                      id={`qr-${model.id}`}
-                      value={`${publicOrigin}/ar/${model.id}`} 
-                      size={100}
-                      level="H"
-                      includeMargin={false}
-                    />
-                    <button 
-                      onClick={() => downloadQR(model.id, model.name)}
-                      className="absolute inset-0 bg-orange-500/90 backdrop-blur-sm rounded-3xl opacity-0 group-hover/qr:opacity-100 transition-opacity flex flex-col items-center justify-center text-white gap-1"
-                    >
-                      <Download className="w-6 h-6" />
-                      <span className="text-[10px] font-bold uppercase tracking-tighter">Download</span>
-                    </button>
-                  </div>
-                  
-                  <div className="flex-1 min-w-0 w-full">
-                    <div className="flex items-start justify-between gap-2 mb-1">
-                      {editingId === model.id ? (
-                        <div className="flex items-center gap-2 w-full">
-                          <input 
-                            autoFocus
-                            type="text"
-                            value={editName}
-                            onChange={(e) => setEditName(e.target.value)}
-                            onKeyDown={(e) => e.key === 'Enter' && saveName()}
-                            className="flex-1 px-3 py-1 text-lg font-bold border-b-2 border-orange-500 outline-none bg-transparent"
-                          />
-                          <button onClick={saveName} className="p-1 text-green-600 hover:bg-green-50 rounded-lg">
-                            <Check className="w-5 h-5" />
-                          </button>
-                          <button onClick={() => setEditingId(null)} className="p-1 text-red-600 hover:bg-red-50 rounded-lg">
-                            <X className="w-5 h-5" />
+          {/* Models Grid */}
+          <div className="space-y-6">
+            <div className="flex items-center justify-between">
+              <h2 className="text-2xl font-bold text-neutral-900">
+                {selectedRestaurant === "All" ? "All Models" : `${selectedRestaurant} Menu`}
+              </h2>
+              <div className="flex items-center gap-2 text-xs font-bold text-neutral-400">
+                <Check className="w-4 h-4 text-green-500" />
+                {filteredModels.length} Items Found
+              </div>
+            </div>
+
+            <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-6">
+              <AnimatePresence mode="popLayout">
+                {filteredModels.map((model) => (
+                  <motion.div 
+                    key={model.id}
+                    layout
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.9 }}
+                    className="bg-white rounded-[32px] border border-neutral-200 shadow-sm overflow-hidden group hover:border-orange-200 transition-all flex flex-col"
+                  >
+                    <div className="p-6 flex-1 space-y-4">
+                      <div className="flex items-start justify-between">
+                        <div className="p-3 bg-neutral-50 rounded-2xl relative group/qr shrink-0">
+                          <QRCodeCanvas id={`qr-${model.id}`} value={`${publicOrigin}/ar/${model.id}`} size={80} level="H" />
+                          <button 
+                            onClick={() => downloadQR(model.id, model.name)}
+                            className="absolute inset-0 bg-orange-500/90 backdrop-blur-sm rounded-2xl opacity-0 group-hover/qr:opacity-100 transition-opacity flex items-center justify-center text-white"
+                          >
+                            <Download className="w-5 h-5" />
                           </button>
                         </div>
-                      ) : (
-                        <>
-                          <h3 className="font-bold text-xl truncate text-neutral-900 group-hover:text-orange-600 transition-colors">
-                            {model.name}
-                          </h3>
-                          <button 
-                            onClick={() => startEditing(model)}
-                            className="p-1.5 text-neutral-400 hover:text-orange-500 hover:bg-orange-50 rounded-xl transition-all opacity-0 group-hover:opacity-100"
-                          >
-                            <Edit2 className="w-4 h-4" />
-                          </button>
-                        </>
-                      )}
+                        <div className="flex flex-col items-end gap-2">
+                          <span className="text-[10px] font-bold px-2 py-1 bg-orange-100 text-orange-600 rounded-lg uppercase tracking-wider">
+                            {model.restaurant || "General"}
+                          </span>
+                          <span className={`text-[10px] font-bold px-2 py-1 rounded-lg uppercase tracking-wider ${
+                            model.url.toLowerCase().endsWith('.usdz') ? 'bg-blue-50 text-blue-600' : 'bg-green-50 text-green-600'
+                          }`}>
+                            {model.url.toLowerCase().endsWith('.usdz') ? 'iOS' : 'Universal'}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="space-y-1">
+                        {editingId === model.id ? (
+                          <div className="flex items-center gap-2">
+                            <input 
+                              autoFocus
+                              type="text"
+                              value={editName}
+                              onChange={(e) => setEditName(e.target.value)}
+                              onKeyDown={(e) => e.key === 'Enter' && saveName()}
+                              className="flex-1 text-lg font-bold border-b-2 border-orange-500 outline-none bg-transparent"
+                            />
+                            <button onClick={saveName} className="text-green-600"><Check className="w-5 h-5" /></button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-between group/title">
+                            <h3 className="font-bold text-lg truncate pr-2">{model.name}</h3>
+                            <button onClick={() => startEditing(model)} className="opacity-0 group-hover/title:opacity-100 text-neutral-400 hover:text-orange-500"><Edit2 className="w-4 h-4" /></button>
+                          </div>
+                        )}
+                        <div className="flex items-center justify-between text-[10px] font-bold text-neutral-400 uppercase tracking-widest">
+                          <span>{new Date(model.createdAt).toLocaleDateString()}</span>
+                          <span className="text-neutral-500">{formatSize(model.size)}</span>
+                        </div>
+                      </div>
                     </div>
-                    
-                    <div className="flex items-center gap-3 mb-4">
-                      <p className="text-xs text-neutral-400 font-bold uppercase tracking-widest flex items-center gap-2">
-                        {model.type === "file" ? <Upload className="w-3 h-3" /> : <LinkIcon className="w-3 h-3" />}
-                        {new Date(model.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
-                      </p>
-                      <span className={`text-[10px] px-2 py-0.5 rounded-md font-bold uppercase tracking-tighter ${
-                        model.url.toLowerCase().endsWith('.usdz') 
-                        ? 'bg-blue-50 text-blue-600 border border-blue-100' 
-                        : 'bg-green-50 text-green-600 border border-green-100'
-                      }`}>
-                        {model.url.toLowerCase().endsWith('.usdz') ? 'iOS Only' : 'Universal'}
-                      </span>
-                    </div>
-                    
-                    <div className="flex items-center gap-2">
+
+                    <div className="p-4 bg-neutral-50 border-t border-neutral-100 flex items-center gap-2">
                       <a 
                         href={`/ar/${model.id}`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="flex-1 bg-neutral-900 text-white text-xs font-bold py-3 rounded-xl flex items-center justify-center gap-2 hover:bg-orange-500 transition-all shadow-lg shadow-neutral-100"
+                        className="flex-1 bg-neutral-900 text-white text-xs font-bold py-3 rounded-xl flex items-center justify-center gap-2 hover:bg-orange-500 transition-all"
                       >
                         <ExternalLink className="w-4 h-4" />
-                        Preview AR
+                        AR Preview
                       </a>
-
                       <button 
                         onClick={() => {
-                          const url = `${publicOrigin}/ar/${model.id}`;
-                          navigator.clipboard.writeText(url);
-                          alert("Link copied to clipboard!");
+                          navigator.clipboard.writeText(`${publicOrigin}/ar/${model.id}`);
+                          alert("Link copied!");
                         }}
-                        className="p-3 bg-neutral-100 text-neutral-600 rounded-xl hover:bg-orange-100 hover:text-orange-600 transition-all"
-                        title="Copy AR Link"
+                        className="p-3 bg-white border border-neutral-200 text-neutral-600 rounded-xl hover:text-orange-600 hover:border-orange-200 transition-all"
                       >
                         <LinkIcon className="w-4 h-4" />
                       </button>
-                      
                       <div className="relative">
-                        <AnimatePresence>
-                          {deletingId === model.id ? (
-                            <motion.div 
-                              initial={{ opacity: 0, scale: 0.9, x: 10 }}
-                              animate={{ opacity: 1, scale: 1, x: 0 }}
-                              exit={{ opacity: 0, scale: 0.9, x: 10 }}
-                              className="absolute right-0 bottom-0 flex items-center gap-2 bg-white p-1 rounded-xl border border-red-100 shadow-xl z-10 whitespace-nowrap"
-                            >
-                              <button 
-                                onClick={() => deleteModel(model.id)}
-                                className="px-3 py-2 bg-red-600 text-white text-[10px] font-bold uppercase rounded-lg hover:bg-red-700 transition-colors"
-                              >
-                                Confirm Delete
-                              </button>
-                              <button 
-                                onClick={() => setDeletingId(null)}
-                                className="p-2 text-neutral-400 hover:bg-neutral-100 rounded-lg transition-colors"
-                              >
-                                <X className="w-4 h-4" />
-                              </button>
-                            </motion.div>
-                          ) : (
-                            <button 
-                              onClick={() => setDeletingId(model.id)}
-                              className="p-3 bg-neutral-100 text-neutral-400 hover:bg-red-50 hover:text-red-600 rounded-xl transition-all"
-                              title="Delete Model"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          )}
-                        </AnimatePresence>
+                        {deletingId === model.id ? (
+                          <div className="absolute right-0 bottom-0 flex items-center gap-1 bg-white p-1 rounded-xl shadow-xl border border-red-100 z-10">
+                            <button onClick={() => deleteModel(model.id)} className="px-3 py-2 bg-red-600 text-white text-[10px] font-bold rounded-lg">Delete</button>
+                            <button onClick={() => setDeletingId(null)} className="p-2 text-neutral-400"><X className="w-4 h-4" /></button>
+                          </div>
+                        ) : (
+                          <button onClick={() => setDeletingId(model.id)} className="p-3 bg-white border border-neutral-200 text-neutral-400 hover:text-red-600 hover:border-red-100 rounded-xl transition-all">
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
                       </div>
                     </div>
-                  </div>
-                </motion.div>
-              ))}
-            </AnimatePresence>
+                  </motion.div>
+                ))}
+              </AnimatePresence>
 
-            {models.length === 0 && (
-              <div className="text-center py-20 bg-neutral-50 rounded-[40px] border-2 border-dashed border-neutral-200">
-                <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-sm">
-                  <Utensils className="w-8 h-8 text-neutral-300" />
+              {filteredModels.length === 0 && (
+                <div className="col-span-full py-20 text-center bg-neutral-100/50 rounded-[40px] border-2 border-dashed border-neutral-200">
+                  <Utensils className="w-12 h-12 text-neutral-300 mx-auto mb-4" />
+                  <p className="text-neutral-500 font-bold">No models found for this category</p>
                 </div>
-                <p className="text-neutral-500 font-bold">No models uploaded yet</p>
-                <p className="text-xs text-neutral-400 mt-1">Your 3D food collection starts here</p>
-              </div>
-            )}
+              )}
+            </div>
           </div>
-        </section>
-      </div>
+        </div>
+      </main>
     </div>
   );
 }

@@ -11,6 +11,7 @@ interface Model {
   originalName?: string;
   url: string;
   type: "file" | "link";
+  restaurant?: string;
   createdAt: number;
 }
 
@@ -216,14 +217,20 @@ export default function ARViewer() {
 
             {/* Model Info */}
             <div className="text-center space-y-3">
-              <motion.h2 
+              <motion.div
                 initial={{ y: 10, opacity: 0 }}
                 animate={{ y: 0, opacity: 1 }}
-                transition={{ delay: 0.1 }}
-                className="text-4xl font-bold text-white tracking-tight"
+                className="flex flex-col items-center gap-1"
               >
-                {model.name}
-              </motion.h2>
+                {model.restaurant && (
+                  <span className="text-[10px] font-bold text-orange-500 uppercase tracking-[0.2em] mb-1">
+                    {model.restaurant}
+                  </span>
+                )}
+                <h2 className="text-4xl font-bold text-white tracking-tight">
+                  {model.name}
+                </h2>
+              </motion.div>
               <motion.p 
                 initial={{ y: 10, opacity: 0 }}
                 animate={{ y: 0, opacity: 1 }}
