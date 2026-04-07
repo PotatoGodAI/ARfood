@@ -86,8 +86,22 @@ export default function ARViewer() {
           const data = docSnap.data();
           let url = data.url;
           
+          // Un-proxy URLs to bypass Vercel's 4.5MB serverless response limit
+          if (url.includes("/api/proxy-storage")) {
+            try {
+              const urlObj = new URL(url.startsWith("http") ? url : window.location.origin + url);
+              const actualUrl = urlObj.searchParams.get("url");
+              if (actualUrl) {
+                url = actualUrl;
+                console.log("Un-proxied URL for large file support:", url);
+              }
+            } catch (e) {
+              console.error("Error un-proxying URL:", e);
+            }
+          }
+          
           // Normalize internal URLs to the current origin to avoid CORS/session issues
-          if (url.includes("/api/proxy-")) {
+          if (url.includes("/api/proxy-drive")) {
             try {
               const urlObj = new URL(url.startsWith("http") ? url : window.location.origin + url);
               // If it's an absolute URL pointing to our own domain (or any AI Studio domain), make it relative

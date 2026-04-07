@@ -161,13 +161,13 @@ export default function Dashboard() {
 
       console.log("Upload successful, blob response:", blob);
       
-      // Use our proxy to avoid CORS issues on the client
-      const proxiedUrl = `/api/proxy-storage?url=${encodeURIComponent(blob.url)}`;
+      // Use direct URL to avoid Vercel 4.5MB proxy limit for large files
+      const finalUrl = blob.url;
       
       const modelData = {
         name: file.name.replace(/\.[^/.]+$/, ""), // Remove extension
         originalName: file.name,
-        url: proxiedUrl,
+        url: finalUrl,
         storagePath: blob.url,
         type: "file",
         size: file.size,
